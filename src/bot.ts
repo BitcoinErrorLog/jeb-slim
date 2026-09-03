@@ -42,6 +42,7 @@ export class Bot {
       secretKeyHex: this.cfg.secretKeyHex,
       homeserverPk: this.cfg.homeserverPk,
       signupToken: this.cfg.signupToken,
+      testnet: this.cfg.testnet,
     });
     this.botPk = this.transport.botPk;
     if (this.cfg.port && Number.isFinite(this.cfg.port)) {
@@ -87,7 +88,7 @@ export class Bot {
         return;
       }
       await this.retryStale();
-      const cur = await this.store.getCursor(this.botPk);
+      const cur = await this.store.getCursor(this.botPk, this.cfg.nexusUrl);
       const items = await this.nexus.notifications(this.botPk, cur.lastTs > 0 ? cur.lastTs : null);
       this.lastPollAt = Date.now();
       const filtered = cur.firstBootDone
@@ -99,7 +100,7 @@ export class Bot {
         void this.consume(n, gen);
       }
       const maxTs = items.length ? Math.max(...items.map((n) => n.timestamp), cur.lastTs) : cur.lastTs;
-      await this.store.setCursor(this.botPk, maxTs, true);
+      await this.store.setCursor(this.botPk, this.cfg.nexusUrl, maxTs, true);
     } catch {
       // keep polling
     }

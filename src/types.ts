@@ -1,5 +1,4 @@
 export const POSTS_PREFIX = "/pub/pubky.app/posts/";
-export const STATIC_TESTNET_HS = "8pinxxgqs41n4aididenw5apqp1urfmzdztr8jt4abrkdn435ewo";
 
 export type MentionKind = "mention" | "reply";
 
@@ -39,6 +38,7 @@ export interface ContractEnv {
   cannedReply: string;
   modelDelayMs: number;
   maxRepliesPerThread: number;
+  testnet: boolean;
 }
 
 export interface AncestorContextEntry {

@@ -2,7 +2,7 @@
 
 Measuring-instrument mention-reply bot. Local commits only; no remotes.
 
-## Proof
+## Proof (after contract 3428ea0)
 
 ### `npm run typecheck`
 
@@ -15,8 +15,6 @@ Exit 0.
 
 ### `npm test`
 
-Postgres: Homebrew `johncarvalho@127.0.0.1:5432/jeb_slim_test` (see below).
-
 ```
 DATABASE_URL=postgres://johncarvalho@127.0.0.1:5432/jeb_slim_test npm test
 
@@ -24,55 +22,45 @@ DATABASE_URL=postgres://johncarvalho@127.0.0.1:5432/jeb_slim_test npm test
       Tests  12 passed (12)
 ```
 
-Covers cursor/`end`, mention+reply filter, idempotent claim→published, ancestor createdAt order, self/blocklist/thread/hourly policy.
-
-### Contract (20/20)
+### Contract, staging, 19/19
 
 ```
 cd /Volumes/vibedrive/vibes-dev/jeb-contract && \
+  CONTRACT_HOMESERVER=staging \
+  CONTRACT_STAGING_ADMIN_PASSWORD="$(cat /tmp/jeb-staging-admin.pw)" \
   DATABASE_URL=postgres://johncarvalho@127.0.0.1:5432/jeb_slim_test \
   CONTRACT_ADAPTER=/Volumes/vibedrive/vibes-dev/jeb-slim/dist/contract-adapter.js \
   npm test
 ```
 
 ```
-[jeb-contract] using fallback homeserver (Postgres prerequisite missing ...)
- ✓ tests/contract.test.ts (15 tests)
+[jeb-contract] homeserver mode=staging
+ ✓ tests/contract.test.ts (14 tests) 102249ms
  ✓ tests/fixtures-shape.test.ts (4 tests)
  ✓ tests/process-group.test.ts (1 test)
  Test Files  3 passed (3)
-      Tests  20 passed (20)
+      Tests  19 passed (19)
+ Duration  103.47s
 ```
 
-Homeserver: in-process fallback (UDP 6881 taken; Docker testnet Postgres also unavailable). Staging sign-in skipped per follow-up brief.
+Admin password was read only via that substitution. Not logged, not written into this repo.
 
 ## LOC (`wc -l` on `src/*.ts` excluding tests)
 
-1061 lines (bot+homeserver+db dominate). Over the ~500 target because the contract needs a fallback HTTP transport plus Postgres idempotency/thread caps.
+**1004** lines (was 1061 with the fake fallback).
 
-## Postgres for tests
+Breakdown: bot 206, db 150, types 108, homeserver 98, config 67, nexus 54, contract-adapter 43, context 34, model 31, keygen 25, health 19, policy 15, log 13, index 10.
 
-Requested `docker run -d --name jeb-slim-pg -p 55437:5432 ... postgres:15-alpine`. On this machine the Docker daemon did not answer on `~/.docker/run/docker.sock` (CLI and HTTP ping timed out). Used an isolated local DB instead: `CREATE DATABASE jeb_slim_test` on Homebrew Postgres 17, user `johncarvalho`, no password in the URL. Schema is only `cursor_state`, `handled_mentions`, `kill_switch`.
+Still above the ~500 target. The drop is the deleted `FallbackTransport` / `JEB_CONTRACT_RUNTIME` path (~70 lines). The rest is product: poll, Postgres idempotency, policy, SDK publish/readback. Not compressed to game the count.
 
-`scripts/test-pg.sh` still documents the intended throwaway container.
+## Transport
 
-## Fresh key
+The bot has **zero test-only transport code**. Publish and readback go through `@synonymdev/pubky` `SessionTransport` only. `env.testnet` (or `JEB_SLIM_TESTNET=1`) selects `Pubky.testnet()` vs `new Pubky()`. Sign-in first, then signup. No harness runtime file is read.
 
-`npm run keygen -- --out secrets/bot.key` printed public `4n8q4u3a4msy5kdghk116y1mkpiuby13k7ub5hj39ihyqoxuh13o` only. Secret file mode 0600, gitignored. Not logged.
+Cursor is keyed by `(bot_id, nexus_url)` so one bot talking to different Nexus bases does not share an `end` cursor.
 
-## What works
+## Left out
 
-- Signin/signup (`Keypair.fromSecret`), Nexus poll with `end` cursor, first-boot max-age (disabled when `<= 0`).
-- Mention + reply notifications; 404 parent → skip; 5xx poll retry.
-- Claim-before-model; processing retry + list-own-posts recovery; publish via `PubkySpecsBuilder.createPost` + readback.
-- Canned reply + `modelDelayMs`; Vercel AI SDK path when canned is unset.
-- Policy: self, blocklist, per-thread cap, per-user hour, kill switch, fail-closed if Postgres is down.
-- `debugLastContext()` ancestors newest-first (`createdAt` descending).
-- `/healthz`, docker-compose + non-root Dockerfile, `.env.example` names only.
-
-## Left out (and why)
-
-- **Docker Postgres / pubky-testnet smoke:** Docker daemon hung; testnet UDP 6881 occupied. Contract fallback is the prescribed smoke test.
-- **Staging homeserver signin:** skipped per additional context (no signup token hunt).
-- **Live model call against OpenAI:** no API key used or searched; contract uses `cannedReply`. The `ai` + `@ai-sdk/openai` path is real and fails the mention as `failed` if the key is missing.
-- **Sub-500 LOC:** not met; cutting further would drop required contract/idempotency behavior.
+- Live model call (no API key used or searched; canned path used by the contract).
+- Local `pubky-testnet` (UDP 6881 taken; staging is the prescribed mode).
+- Sub-500 LOC (not met; remaining lines are required product behavior).

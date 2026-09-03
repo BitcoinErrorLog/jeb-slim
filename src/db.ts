@@ -10,11 +10,20 @@ export class Store {
   }
 
   async migrate(): Promise<void> {
+    const cols = await this.pool.query<{ column_name: string }>(
+      `SELECT column_name FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'cursor_state'`,
+    );
+    const names = new Set(cols.rows.map((r) => r.column_name));
+    if (names.size > 0 && !names.has("nexus_url")) {
+      await this.pool.query("DROP TABLE cursor_state");
+    }
     await this.pool.query(`
       CREATE TABLE IF NOT EXISTS cursor_state (
-        bot_id TEXT PRIMARY KEY,
+        bot_id TEXT NOT NULL,
+        nexus_url TEXT NOT NULL,
         last_ts BIGINT NOT NULL DEFAULT 0,
-        first_boot_done BOOLEAN NOT NULL DEFAULT FALSE
+        first_boot_done BOOLEAN NOT NULL DEFAULT FALSE,
+        PRIMARY KEY (bot_id, nexus_url)
       );
       CREATE TABLE IF NOT EXISTS handled_mentions (
         mention_key TEXT PRIMARY KEY,
@@ -53,22 +62,22 @@ export class Store {
     return r.rows[0]?.disabled === true;
   }
 
-  async getCursor(botId: string): Promise<{ lastTs: number; firstBootDone: boolean }> {
+  async getCursor(botId: string, nexusUrl: string): Promise<{ lastTs: number; firstBootDone: boolean }> {
     const r = await this.pool.query(
-      `INSERT INTO cursor_state (bot_id, last_ts, first_boot_done) VALUES ($1, 0, FALSE)
-       ON CONFLICT (bot_id) DO UPDATE SET bot_id = EXCLUDED.bot_id
+      `INSERT INTO cursor_state (bot_id, nexus_url, last_ts, first_boot_done) VALUES ($1, $2, 0, FALSE)
+       ON CONFLICT (bot_id, nexus_url) DO UPDATE SET bot_id = EXCLUDED.bot_id
        RETURNING last_ts, first_boot_done`,
-      [botId],
+      [botId, nexusUrl],
     );
     const row = r.rows[0] as { last_ts: string | number; first_boot_done: boolean };
     return { lastTs: Number(row.last_ts), firstBootDone: row.first_boot_done };
   }
 
-  async setCursor(botId: string, lastTs: number, firstBootDone: boolean): Promise<void> {
+  async setCursor(botId: string, nexusUrl: string, lastTs: number, firstBootDone: boolean): Promise<void> {
     await this.pool.query(
-      `INSERT INTO cursor_state (bot_id, last_ts, first_boot_done) VALUES ($1, $2, $3)
-       ON CONFLICT (bot_id) DO UPDATE SET last_ts = EXCLUDED.last_ts, first_boot_done = EXCLUDED.first_boot_done`,
-      [botId, lastTs, firstBootDone],
+      `INSERT INTO cursor_state (bot_id, nexus_url, last_ts, first_boot_done) VALUES ($1, $2, $3, $4)
+       ON CONFLICT (bot_id, nexus_url) DO UPDATE SET last_ts = EXCLUDED.last_ts, first_boot_done = EXCLUDED.first_boot_done`,
+      [botId, nexusUrl, lastTs, firstBootDone],
     );
   }
 

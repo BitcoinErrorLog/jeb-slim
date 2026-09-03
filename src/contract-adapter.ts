@@ -30,6 +30,7 @@ export default class SlimAdapter {
       modelTimeoutMs: 30_000,
       blocklist: new Set(),
       disabledEnv: false,
+      testnet: env.testnet,
     };
     this.bot = new Bot(cfg);
     await this.bot.start();

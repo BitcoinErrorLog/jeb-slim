@@ -17,6 +17,7 @@ export interface Config {
   blocklist: Set<string>;
   disabledEnv: boolean;
   port?: number;
+  testnet: boolean;
 }
 
 function req(name: string): string {
@@ -61,5 +62,6 @@ export function configFromProcessEnv(): Config {
     ),
     disabledEnv: process.env.JEB_SLIM_DISABLED === "1",
     port: portRaw ? Number(portRaw) : undefined,
+    testnet: process.env.JEB_SLIM_TESTNET === "1",
   };
 }
